@@ -2,7 +2,6 @@ from torch import nn
 
 from rlepose.utils import Registry, build_from_cfg, retrieve_from_cfg
 
-
 SPPE = Registry('sppe')
 LOSS = Registry('loss')
 DATASET = Registry('dataset')

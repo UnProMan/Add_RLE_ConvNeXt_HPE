@@ -1,0 +1,64 @@
+DATASET:
+  TRAIN:
+    TYPE: 'H36m' 
+    ROOT: './data/h36m/'
+    ANN: 'Sample_trainmin_train_Human36M' # -> ..._protocol_2.json
+  VAL:
+    TYPE: 'H36m'
+    ROOT: './data/h36m/'
+    ANN: 'Sample_64_test_Human36M' # -> ..._protocol_2.json
+  TEST:
+    TYPE: 'H36m'
+    ROOT: './data/h36m/'
+    ANN: 'Sample_64_test_Human36M'
+
+DATA_PRESET:
+  TYPE: 'simple_3d'
+  PROTOCOL: 2
+  SIGMA: 2
+  ROT_FACTOR: 30
+  SCALE_FACTOR: 0.3
+  OUT_3D: True
+
+  NUM_JOINTS: 18
+  IMAGE_SIZE:
+  - 256
+  - 256
+  HEATMAP_SIZE:
+  - 32  
+  - 32
+
+MODEL:
+  TYPE: 'ConvNextPose'
+  PRETRAINED: ''
+  TRY_LOAD: ''
+
+  depth_dim: 32
+  embedding_size: 768  
+  head_channels: 128
+  drop_rate: 0.1      
+  quant_flag: false
+  convnext_type: 50
+
+LOSS:
+  TYPE: 'RLELoss3D' 
+
+TEST:
+  HEATMAP2COORD: 'coord'
+  FLIP_TEST: true
+  FLIP_SHIFT: true
+
+TRAIN:
+  WORLD_SIZE: 2
+  BATCH_SIZE: 96
+  BEGIN_EPOCH: 0
+  END_EPOCH: 200
+  OPTIMIZER: 'adam'
+  GRAD_CLIP:
+    MAX_NORM: 35
+    NORM_TYPE: 2
+  LR: 0.001
+  LR_FACTOR: 0.1
+  LR_STEP:
+  - 90
+  - 120

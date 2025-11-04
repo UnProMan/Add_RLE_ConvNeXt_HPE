@@ -138,7 +138,7 @@ def get_install_requires():
         'tqdm', 'tensorboardx', 'easydict',
         'pyyaml',
         'torch>=1.1.0', 'torchvision>=0.3.0',
-        'munkres', 'timm==0.1.20', 'natsort'
+        'munkres', 'timm>=0.6.12', 'natsort'
     ]
     return install_requires
 
