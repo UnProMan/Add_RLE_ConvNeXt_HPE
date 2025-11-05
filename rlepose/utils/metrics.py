@@ -236,9 +236,10 @@ def calc_coord_accuracy(output, target, hm_shape, output_3d=False, num_joints=No
 
         labels[:, :, 0] = (labels[:, :, 0] + 0.5) * hm_width
         labels[:, :, 1] = (labels[:, :, 1] + 0.5) * hm_height
-        labels[:, :, 2] = (labels[:, :, 2] + 0.5) * hm_depth
+        if hm_depth is not None:
+            labels[:, :, 2] = (labels[:, :, 2] + 0.5) * hm_depth
 
-        coords[:, :, 2] = (coords[:, :, 2] + 0.5) * hm_depth
+        coords[:, :, 2] = (coords[:, :, 2] + 0.5) * hm_depth if hm_depth is not None else coords[:, :, 2]
 
         if root_idx is not None:
             labels = labels - labels[:, root_idx, :][:, None, :]
@@ -257,7 +258,7 @@ def calc_coord_accuracy(output, target, hm_shape, output_3d=False, num_joints=No
     labels = labels * label_masks
 
     if output_3d:
-        norm = np.ones((coords.shape[0], 3)) * np.array([hm_width, hm_height, hm_depth]) / 10
+        norm = np.ones((coords.shape[0], 3)) * np.array([hm_width, hm_height, hm_depth if hm_depth is not None else 1]) / 10
     else:
         norm = np.ones((coords.shape[0], 2)) * np.array([hm_width, hm_height]) / 10
 

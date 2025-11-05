@@ -125,3 +125,112 @@ class RLELoss3D(nn.Module):
             return loss.sum() / len(loss)
         else:
             return loss.sum()
+
+
+@LOSS.register_module
+class NMTCriterion(nn.Module):
+    """
+    SimCC (NMT) loss for 3-D pose.
+    - output : [B, J, 3, tokens]   (SimCC logits)
+    - labels : dict
+        * target_uvd        : [B, J, 3]  or  [J, 3]  or  [B, 3] or [B, J*3]
+        * target_uvd_weight : same as above
+    """
+    
+    def __init__(self, label_smoothing=0.0):
+        super().__init__()
+        self.label_smoothing = label_smoothing
+        self.LogSoftmax = nn.LogSoftmax(dim=1)
+        self.confidence = 1.0 - label_smoothing
+
+        self.criterion_ = (
+            nn.KLDivLoss(reduction='none') if label_smoothing > 0
+            else nn.NLLLoss(reduction='none', ignore_index=100000)
+        )
+
+    def _axis_loss(self, logits, gt, weight):
+        scores = self.LogSoftmax(logits)
+        n_token = scores.size(-1)
+        gt_idx = torch.clamp(gt, min=0, max=n_token-1).round().long()
+
+        if self.confidence < 1:
+            one_hot = torch.full((1, n_token), self.label_smoothing/(n_token-1),
+                                 device=logits.device, dtype=logits.dtype)
+            one_hot[0, gt_idx] = self.confidence
+            target = one_hot.repeat(gt.size(0), 1)
+        else:
+            target = gt_idx
+
+        loss = self.criterion_(scores, target)
+        return (loss * weight).sum()
+
+    def forward(self, output, labels):
+        # Handle output if EasyDict or dict
+        if hasattr(output, 'heatmap'):
+            output = output.heatmap
+        elif isinstance(output, dict) and 'heatmap' in output:
+            output = output['heatmap']
+
+        # Extract target and weight
+        target_key = 'target_uvd'
+        weight_key = 'target_uvd_weight'
+        if hasattr(labels, target_key):
+            target = getattr(labels, target_key)
+            weight = getattr(labels, weight_key)
+        else:
+            target = labels[target_key]
+            weight = labels[weight_key]
+
+        # Ensure tensor
+        target = torch.as_tensor(target)
+        weight = torch.as_tensor(weight)
+
+        # To device
+        device = output.device
+        target = target.to(device).float()
+        weight = weight.to(device).float()
+
+        B = output.size(0)
+        J = output.size(1)
+
+        # Normalize shape to [B, J, 3]
+        if target.dim() == 3:
+            # [B, J, 3]
+            pass
+        elif target.dim() == 2:
+            if target.size(0) == B:
+                if target.size(1) == 3:
+                    # [B, 3] -> [B, J, 3]
+                    target = target.unsqueeze(1).expand(-1, J, -1)
+                    weight = weight.unsqueeze(1).expand(-1, J, -1)
+                elif target.size(1) == J * 3:
+                    # [B, J*3] -> [B, J, 3]
+                    target = target.view(B, J, 3)
+                    weight = weight.view(B, J, 3)
+                else:
+                    raise ValueError(f"Invalid shape {target.shape}")
+            elif target.size(0) == J:
+                # [J, 3] -> [B, J, 3]
+                target = target.unsqueeze(0).expand(B, -1, -1)
+                weight = weight.unsqueeze(0).expand(B, -1, -1)
+            else:
+                raise ValueError(f"Invalid shape {target.shape}")
+        else:
+            raise ValueError(f"Invalid dim {target.dim()}")
+
+        assert target.shape == (B, J, 3), f"target {target.shape}"
+        assert weight.shape == (B, J, 3), f"weight {weight.shape}"
+
+        # visibility and depth
+        vis_xy = weight[:, :, :2].sum(dim=2).clamp(max=1).unsqueeze(2)  # [B, J, 1]
+        have_dep = weight[:, :, 2].any(dim=1, keepdim=True).float()    # [B, 1]
+
+        loss = 0.0
+        for j in range(J):
+            w_vis = vis_xy[:, j, 0]
+            w_dep = have_dep[:, 0]
+            loss += self._axis_loss(output[:, j, 0, :], target[:, j, 0], w_vis)
+            loss += self._axis_loss(output[:, j, 1, :], target[:, j, 1], w_vis)
+            loss += self._axis_loss(output[:, j, 2, :], target[:, j, 2], w_vis * w_dep)
+
+        return loss / B

@@ -31,28 +31,27 @@ DATA_PRESET:
   - 64
 
 MODEL:
-  TYPE: 'ConvNextPose'
+  TYPE: 'ResNetPoseSimCC'
   PRETRAINED: ''
   TRY_LOAD: ''
 
-  depth_dim: 32
-  embedding_size: 768  
-  head_channels: 128
+  depth_dim: 64
+  embedding_size: 2048 
+  head_channels: 256
   drop_rate: 0.1      
   quant_flag: false
-  convnext_type: 50
 
 LOSS:
-  TYPE: 'MSELoss' 
+  TYPE: 'NMTCriterion' 
 
 TEST:
-  HEATMAP2COORD: 'heatmap'
+  HEATMAP2COORD: 'coord'
   FLIP_TEST: true
   FLIP_SHIFT: true
 
 TRAIN:
   WORLD_SIZE: 2
-  BATCH_SIZE: 16
+  BATCH_SIZE: 4
   BEGIN_EPOCH: 0
   END_EPOCH: 1
   OPTIMIZER: 'adam'
