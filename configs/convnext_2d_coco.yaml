@@ -51,7 +51,7 @@ LOSS:
   TYPE: 'MSELoss'
 
 TEST:
-  HEATMAP2COORD: 'coord' 
+  HEATMAP2COORD: 'heatmap' 
   FLIP_TEST: true
   FLIP_SHIFT: true
 
@@ -59,10 +59,8 @@ TRAIN:
   WORLD_SIZE: 8
   BATCH_SIZE: 16
   BEGIN_EPOCH: 0
-  END_EPOCH: 1
+  END_EPOCH: 2
   OPTIMIZER: 'adam'
   LR: 0.001
   LR_FACTOR: 0.1
-  LR_STEP:
-  - 170
-  - 200
+  LR_STEP: []

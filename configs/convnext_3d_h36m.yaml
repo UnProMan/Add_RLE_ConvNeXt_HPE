@@ -1,16 +1,14 @@
 DATASET:
   TRAIN:
-    TYPE: 'H36m' 
-    ROOT: './data/h36m/'
-    ANN: 'Sample_trainmin_train_Human36M' # -> ..._protocol_2.json
+    TYPE: 'H36mMpii'
+    SET_LIST:
+      - ROOT: './data/h36m/'
+        TRAIN_SET: 'Sample_trainmin_train_Human36M'
+      - ROOT: './data/mpii/'
+        TRAIN_SET: 'annot_mpii'
   VAL:
-    TYPE: 'H36m'
-    ROOT: './data/h36m/'
-    ANN: 'Sample_64_test_Human36M' # -> ..._protocol_2.json
-  TEST:
-    TYPE: 'H36m'
-    ROOT: './data/h36m/'
-    ANN: 'Sample_64_test_Human36M'
+    TYPE: 'H36mMpii'
+    TEST_SET: 'Sample_64_test_Human36M'
 
 DATA_PRESET:
   TYPE: 'simple_3d'
@@ -18,15 +16,19 @@ DATA_PRESET:
   SIGMA: 2
   ROT_FACTOR: 30
   SCALE_FACTOR: 0.3
+  COLOR_FACTOR: 0.2
   OUT_3D: True
+  PROB_HALF_BODY: -1
+  OCCLUSION: True
+  NUM_JOINTS_HALF_BODY: 8
 
   NUM_JOINTS: 18
   IMAGE_SIZE:
   - 256
   - 256
   HEATMAP_SIZE:
-  - 32  
-  - 32
+  - 64
+  - 64
 
 MODEL:
   TYPE: 'ConvNextPose'
@@ -41,18 +43,18 @@ MODEL:
   convnext_type: 50
 
 LOSS:
-  TYPE: 'RLELoss3D' 
+  TYPE: 'MSELoss' 
 
 TEST:
-  HEATMAP2COORD: 'coord'
+  HEATMAP2COORD: 'heatmap'
   FLIP_TEST: true
   FLIP_SHIFT: true
 
 TRAIN:
   WORLD_SIZE: 2
-  BATCH_SIZE: 96
+  BATCH_SIZE: 32
   BEGIN_EPOCH: 0
-  END_EPOCH: 200
+  END_EPOCH: 1
   OPTIMIZER: 'adam'
   GRAD_CLIP:
     MAX_NORM: 35

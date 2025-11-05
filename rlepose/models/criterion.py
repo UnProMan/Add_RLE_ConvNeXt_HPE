@@ -14,11 +14,50 @@ class MSELoss(nn.Module):
         super(MSELoss, self).__init__()
         self.criterion = nn.MSELoss()
 
+    # def forward(self, output, labels):
+    #     pred_hm = output['heatmap']
+    #     gt_hm = labels['target_hm']
+    #     gt_hm_weight = labels['target_hm_weight']
+    #     loss = 0.5 * self.criterion(pred_hm.mul(gt_hm_weight), gt_hm.mul(gt_hm_weight))
+
+    #     return loss
+
     def forward(self, output, labels):
-        pred_hm = output['heatmap']
-        gt_hm = labels['target_hm']
-        gt_hm_weight = labels['target_hm_weight']
-        loss = 0.5 * self.criterion(pred_hm.mul(gt_hm_weight), gt_hm.mul(gt_hm_weight))
+        # 3D 예측 히트맵 (e.g., [B, 576, 32, 32])
+        pred_hm_3d_flat = output['heatmap']
+        # 2D 정답 히트맵 (e.g., [B, 18, 32, 32])
+        gt_hm_2d = labels['target_uvd']
+        # 2D 정답 가중치 (e.g., [B, 18, 1, 1])
+        gt_hm_weight = labels['target_uvd_weight']
+
+        # --- 3D 예측을 2D로 변환하는 로직 ---
+        
+        # 1. 정답(gt_hm_2d)에서 관절 수(num_joints)를 가져옵니다.
+        num_joints = gt_hm_2d.shape[1] # e.g., 18
+
+        # 2. 예측(pred_hm_3d_flat) 채널이 정답 채널로 나누어지는지 확인
+        if pred_hm_3d_flat.shape[1] % num_joints != 0:
+            raise ValueError(f"Prediction channels ({pred_hm_3d_flat.shape[1]})"
+                             f" not divisible by GT channels ({num_joints})")
+
+        # 3. 깊이(Z) 차원(depth_dim)을 계산합니다.
+        depth_dim = pred_hm_3d_flat.shape[1] // num_joints # e.g., 576 // 18 = 32
+
+        # 4. 평탄화된 3D 예측을 [B, J, D, H, W]로 재구성합니다.
+        # e.g., [B, 576, 32, 32] -> [B, 18, 32, 32, 32]
+        pred_hm_3d = pred_hm_3d_flat.reshape(-1, 
+                                             num_joints, 
+                                             depth_dim, 
+                                             pred_hm_3d_flat.shape[2], 
+                                             pred_hm_3d_flat.shape[3])
+
+        # 5. 깊이(Z) 차원(dim=2)을 따라 합산(sum)하여 2D 히트맵으로 만듭니다.
+        # (torch.max(pred_hm_3d, dim=2)[0] 를 사용해도 됩니다)
+        pred_hm_2d = torch.sum(pred_hm_3d, dim=2)
+        # pred_hm_2d shape: [B, 18, 32, 32]
+
+        # 6. 이제 2D 예측과 2D 정답을 사용하여 손실을 계산합니다.
+        loss = 0.5 * self.criterion(pred_hm_2d.mul(gt_hm_weight), gt_hm_2d.mul(gt_hm_weight))
 
         return loss
 

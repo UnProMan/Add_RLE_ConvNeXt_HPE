@@ -109,23 +109,85 @@ class H36mMpii(data.Dataset):
             target_uvd_origin = target.pop('target_uvd')
             target_uvd_weight_origin = target.pop('target_uvd_weight')
 
-            target_uvd = torch.zeros(self.num_joints, 3)
-            target_uvd_weight = torch.zeros(self.num_joints, 3)
+            # --- 💡 로직 분기 시작 💡 ---
 
-            assert target_uvd_origin.dim() == 1 and target_uvd_origin.shape[0] == 16 * 3, target_uvd_origin.shape
-            target_uvd_origin = target_uvd_origin.reshape(16, 3)
-            target_uvd_weight_origin = target_uvd_weight_origin.reshape(16, 3)
-            for i in range(s_36_jt_num):
-                id1 = i
-                id2 = s_mpii_2_hm36_jt[i]
-                if id2 >= 0:
-                    target_uvd[id1, :2] = target_uvd_origin[id2, :2].clone()
-                    target_uvd_weight[id1, :2] = target_uvd_weight_origin[id2, :2].clone()
+            # 1. RLELoss (좌표) 데이터인 경우 (dim() == 1)
+            #    (이것이 rlepose의 원래 로직입니다)
+            if target_uvd_origin.dim() == 1:
+                target_uvd = torch.zeros(self.num_joints, 3)
+                target_uvd_weight = torch.zeros(self.num_joints, 3)
 
-            target['target_uvd'] = target_uvd.reshape(-1)
-            target['target_uvd_weight'] = target_uvd_weight.reshape(-1)
+                # 원래 assert 로직 유지 (16 * 3 = 48)
+                assert target_uvd_origin.shape[0] == 16 * 3, f"RLE coord shape error: {target_uvd_origin.shape}"
+                target_uvd_origin = target_uvd_origin.reshape(16, 3)
+                target_uvd_weight_origin = target_uvd_weight_origin.reshape(16, 3)
+                
+                for i in range(s_36_jt_num):
+                    id1 = i
+                    id2 = s_mpii_2_hm36_jt[i]
+                    if id2 >= 0:
+                        target_uvd[id1, :2] = target_uvd_origin[id2, :2].clone()
+                        target_uvd_weight[id1, :2] = target_uvd_weight_origin[id2, :2].clone()
+
+                target['target_uvd'] = target_uvd.reshape(-1)
+                target['target_uvd_weight'] = target_uvd_weight.reshape(-1)
+            
+            # 2. MSELoss (히트맵) 데이터인 경우 (dim() == 3)
+            #    (이것이 ConvNextPose를 위한 새 로직입니다)
+            elif target_uvd_origin.dim() == 3:
+                num_mpii_joints, h, w = target_uvd_origin.shape
+                # 히트맵 assert 로직 (16, 32, 32)
+                assert num_mpii_joints == 16, f"Heatmap shape error: {target_uvd_origin.shape}"
+                
+                target_uvd = torch.zeros(self.num_joints, h, w)           # (18, 32, 32)
+                target_uvd_weight = torch.zeros(self.num_joints, 1, 1)    # (18, 1, 1)
+
+                for i in range(s_36_jt_num): # 0~17 (H36M 관절 인덱스)
+                    id_h36m = i
+                    id_mpii = s_mpii_2_hm36_jt[i] # H36M 인덱스에 매핑되는 MPII 인덱스
+                    
+                    if id_mpii >= 0:
+                        # 매핑되는 관절이 있으면 해당 히트맵 채널을 그대로 복사
+                        target_uvd[id_h36m, :, :] = target_uvd_origin[id_mpii, :, :].clone()
+                        # 가중치도 복사
+                        target_uvd_weight[id_h36m] = target_uvd_weight_origin[id_mpii].clone()
+                
+                target['target_uvd'] = target_uvd
+                target['target_uvd_weight'] = target_uvd_weight
+            
+            # 3. 예외 처리
+            else:
+                raise ValueError(f"Unexpected target_uvd shape from MPII: {target_uvd_origin.shape}")
+
+        # --- 로직 분기 끝 ---
 
         assert set(target.keys()).issubset(self.data_domain), (set(target.keys()), self.data_domain)
         target.pop('type')
 
         return img, target, img_id, bbox
+
+        # if dataset_idx == 1:
+        #     # Mpii
+        #     target_uvd_origin = target.pop('target_uvd')
+        #     target_uvd_weight_origin = target.pop('target_uvd_weight')
+
+        #     target_uvd = torch.zeros(self.num_joints, 3)
+        #     target_uvd_weight = torch.zeros(self.num_joints, 3)
+
+        #     assert target_uvd_origin.dim() == 1 and target_uvd_origin.shape[0] == 16 * 3, target_uvd_origin.shape
+        #     target_uvd_origin = target_uvd_origin.reshape(16, 3)
+        #     target_uvd_weight_origin = target_uvd_weight_origin.reshape(16, 3)
+        #     for i in range(s_36_jt_num):
+        #         id1 = i
+        #         id2 = s_mpii_2_hm36_jt[i]
+        #         if id2 >= 0:
+        #             target_uvd[id1, :2] = target_uvd_origin[id2, :2].clone()
+        #             target_uvd_weight[id1, :2] = target_uvd_weight_origin[id2, :2].clone()
+
+        #     target['target_uvd'] = target_uvd.reshape(-1)
+        #     target['target_uvd_weight'] = target_uvd_weight.reshape(-1)
+
+        # assert set(target.keys()).issubset(self.data_domain), (set(target.keys()), self.data_domain)
+        # target.pop('type')
+
+        # return img, target, img_id, bbox

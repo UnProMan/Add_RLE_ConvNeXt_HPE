@@ -252,7 +252,8 @@ class SimpleTransform3D(object):
             target, target_weight = self._target_generator(joints, self.num_joints)
         elif self._loss_type == 'coord':
             target, target_weight = self._integral_target_generator(joints, self.num_joints, inp_h, inp_w)
-        target_weight *= joints_vis.reshape(-1)
+            target_weight *= joints_vis.reshape(-1)
+            
         bbox = _center_scale_to_box(center, scale)
 
         assert img.shape[2] == 3

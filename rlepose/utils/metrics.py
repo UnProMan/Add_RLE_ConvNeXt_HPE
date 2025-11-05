@@ -114,9 +114,52 @@ def evaluate_mAP(res_file, ann_type='bbox', ann_file='person_keypoints_val2017.j
 
 def calc_accuracy(output, target):
     """Calculate heatmap accuracy."""
-    preds = output.heatmap
-    labels = target['target_hm']
-    labels_mask = target['target_hm_weight']
+    # 3D 예측 히트맵 (e.g., [B, 576, H, W])
+    preds_3d_flat = output.heatmap
+
+    # 2D 정답 히트맵 (이전 수정)
+    if 'target_hm' in target:
+        labels = target['target_hm']
+        labels_mask = target['target_hm_weight']
+    else:
+        labels = target['target_uvd']
+        labels_mask = target['target_uvd_weight']
+
+    # --- 💡 START: 3D -> 2D 변환 로직 (criterion.py에서 복사) 💡 ---
+    
+    # 1. 정답(labels)에서 관절 수(num_joints)를 가져옵니다.
+    num_joints = labels.shape[1] # e.g., 18
+
+    # 2. 채널이 나누어지는지 확인
+    if preds_3d_flat.shape[1] % num_joints != 0:
+        raise ValueError(f"Prediction channels ({preds_3d_flat.shape[1]})"
+                         f" not divisible by GT channels ({num_joints})")
+
+    # 3. 깊이(Z) 차원(depth_dim)을 계산합니다.
+    depth_dim = preds_3d_flat.shape[1] // num_joints # e.g., 576 // 18 = 32
+
+    # 4. 평탄화된 3D 예측을 [B, J, D, H, W]로 재구성합니다.
+    pred_hm_3d = preds_3d_flat.reshape(-1, 
+                                         num_joints, 
+                                         depth_dim, 
+                                         preds_3d_flat.shape[2], 
+                                         preds_3d_flat.shape[3])
+
+    # 5. 깊이(Z) 차원(dim=2)을 따라 합산(sum)하여 2D 히트맵으로 만듭니다.
+    preds = torch.sum(pred_hm_3d, dim=2)
+    # preds shape: [B, 18, H, W]
+
+    # 6. (중요) 예측과 정답의 해상도가 다를 경우 리사이즈 (criterion.py에서 복사)
+    if preds.shape[2:] != labels.shape[2:]:
+        preds = F.interpolate(
+            preds, 
+            size=labels.shape[2:], # (e.g., 64x64 or 32x32)
+            mode='bilinear', 
+            align_corners=False
+        )
+    # --- 💡 END: 3D -> 2D 변환 로직 💡 ---
+
+    # 이제 이 코드는 정상 작동합니다: [B, 18, H, W] * [B, 18, 1, 1]
     preds = preds * labels_mask
     labels = labels * labels_mask
 
